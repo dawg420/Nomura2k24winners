@@ -1,10 +1,14 @@
 import boto3
 import json
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 # Initialize a session using Amazon Bedrock
 session = boto3.Session(
-    aws_access_key_id='AKIA6ODU6VQQJH2C5HSO',
-    aws_secret_access_key='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',
+    aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
+    aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY_ID"),
     region_name='us-east-1'
 )
 
