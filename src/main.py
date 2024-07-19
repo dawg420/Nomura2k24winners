@@ -1,51 +1,43 @@
-import boto3
 import json
-from dotenv import load_dotenv
-import os
+from src.llm_utils import llm_invoke
+from src.esg_utils import get_esg_scores, update_esg_scores
+from src.qdrant_utils import get_stock_vector, search_stock_in_qdrant, add_stock_to_qdrant
+from src.s3_utils import check_article_processed, mark_article_processed
+from src.article_utils import get_article_text, extract_stocks_from_response
 
-load_dotenv()
+def main():
+    # Load articles from JSON file
+    with open('data/articles.json', 'r') as file:
+        articles = json.load(file)
 
-# Initialize a session using Amazon Bedrock
-session = boto3.Session(
-    aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
-    aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY_ID"),
-    region_name='us-east-1'
-)
+    # Filter articles by category
+    business_articles = [article for article in articles if article['category'] == 'business']
 
-# Initialize the Bedrock client
-bedrock_client = session.client('bedrock-runtime')
+    for article in business_articles:
+        article_name = article['headline']
+        article_url = article['link']
 
-# Define the query
-query = "Where do babies come from?"
+        if check_article_processed(article_name, article_url):
+            continue
 
-# Define the prompt with the query
-prompt = f"""You are an AI assistant that answers questions. Maintain a professional and helpful tone. Help the user with this problem: {query}"""
+        article_text = get_article_text(article_url)
+        llm_response = llm_invoke({"text": article_text})
+        stocks = extract_stocks_from_response(llm_response)
 
-# Create the body dictionary
-body_dict = {
-    "prompt": prompt,
-    "max_gen_len": 512,  # Using a smaller max length for debugging
-    "temperature": 0,  # Adjusting temperature for variability
-    "top_p": 0.9
-}
+        for stock in stocks:
+            # Check if stock is in Qdrant DB
+            stock_vector = get_stock_vector(stock)
+            existing_stock = search_stock_in_qdrant(stock_vector)
 
-# Convert the dictionary to a JSON string
-body_json = json.dumps(body_dict)
+            if existing_stock:
+                stock_name = existing_stock['name']
+                esg_scores = get_esg_scores(stock_name)
+                update_esg_scores(stock_name, esg_scores)
+            else:
+                esg_scores = get_esg_scores(stock)
+                add_stock_to_qdrant(stock, stock_vector, esg_scores)
 
-# Define the kwargs with the formatted body
-kwargs = {
-    "modelId": "meta.llama3-70b-instruct-v1:0",
-    "contentType": "application/json",
-    "accept": "application/json",
-    "body": body_json
-}
+        mark_article_processed(article_name, article_url)
 
-# Print the kwargs for debugging
-print("Request Payload:", kwargs)
-
-# Invoke the model
-response = bedrock_client.invoke_model(**kwargs)
-
-# Read and print the response
-response_body = json.loads(response['body'].read().decode('utf-8'))
-print("Response:", response_body)
+if __name__ == "__main__":
+    main()
