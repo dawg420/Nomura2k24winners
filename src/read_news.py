@@ -2,6 +2,7 @@ import pandas as pd
 import json
 import os
 import requests
+import boto3
 from bs4 import BeautifulSoup
 
 bbc_news = pd.read_csv('./Downloads/Nomura Data/bbc_news.csv')
@@ -53,5 +54,21 @@ def get_bbc_article_content(url):
 
     return article_text
 
-bbc_content = [get_bbc_article_content(bbc_business.loc[i, 'link']) for i in len(bbc_business)]
-huff_content = [get_huff_content(huff_news.loc[i, 'link']) for i in len(huff_news)]
+def upload_article(url, headline):
+    try:
+        data_string = get_huff_content(url)
+    except Exception:
+        try:
+            data_string = get_bbc_article_content(url)
+        except Exception:
+            print('Please upload a USABLE url')
+            return
+    s3 = boto3.resource("s3",
+                        aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
+                        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY_ID"),
+                        region_name='us-east-1')
+    obj = s3.Object(
+            bucket_name='aquilabeezacr', 
+            key=f'nomura/{headline}.txt'
+        )
+    obj.put(Body=data_string)
