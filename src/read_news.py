@@ -4,6 +4,7 @@ import os
 import requests
 import boto3
 from bs4 import BeautifulSoup
+from langchain_community.document_loaders import PlaywrightURLLoader
 
 #bbc_news = pd.read_csv('./Downloads/Nomura Data/bbc_news.csv')
 #esg_ratings = pd.read_csv('./Downloads/Nomura Data/SP 500 ESG Risk Ratings.csv')
@@ -55,25 +56,14 @@ from bs4 import BeautifulSoup
 #    return article_text
 
 def get_text(url):
-    # Fetch the web page
-    response = requests.get(url)
-    if response.status_code != 200:
-        return f"Failed to retrieve the web page. Status code: {response.status_code}"
+    loader = PlaywrightURLLoader(urls=[url], remove_selectors=["header", "footer"])
+    try:
+        data = loader.load()
+        return data[0].page_content
+    except Exception as e:
+        print(f"Failed to load content from {url}: {e}")
+        return ""
 
-    # Parse the HTML content
-    soup = BeautifulSoup(response.content, 'html.parser')
-
-    # Find the article content (specific to the website structure)
-    # This example is tailored to HuffPost articles
-    article = soup.find('article')
-    if not article:
-        return "Article content not found."
-
-    # Extract text from the article content
-    paragraphs = article.find_all('p')
-    article_text = "\n\n".join([p.get_text() for p in paragraphs])
-
-    return article_text
 
 def upload_article(url, headline):
     try:
